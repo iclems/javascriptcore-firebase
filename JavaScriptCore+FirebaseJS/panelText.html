@@ -1,0 +1,509 @@
+<!doctype html>
+<html>
+
+<head>
+  <meta charset="utf-8" />
+
+  <script src="https://cdn.firebase.com/v0/firebase.js"></script>
+
+  <!-- Include CodeMirror -->
+  <script src="codemirror/codemirror.js"></script>
+  <link rel="stylesheet" href="codemirror/codemirror.css" />
+
+  <!-- Include Firepad -->
+  <script src="firepad/firepad.js"></script>
+  <link rel="stylesheet" href="firepad/firepad.css" />
+
+  <style>
+    html { height: 100%; }
+    body { margin: 0; height: 100%; position: relative; }
+      /* Height / width / positioning can be customized for your use case.
+         For demo purposes, we make firepad fill the entire browser. */
+    .firepad {
+        position: absolute; left: 10px; top: 0px; bottom: 0px; right: 10px; height: auto;
+    }
+  
+  .firepad .CodeMirror-lines {
+      padding: 10px 0 10px 0;
+  }
+  
+    .powered-by-firepad {
+      display: none;
+    }
+    
+    .firepad > div {
+      font: 14px Verdana, sans-serif;
+    }
+
+    .firepad input[type="checkbox"] {
+      margin:-3px 5px 0 0;
+    }
+    
+    .firepad .lm-hr {
+    	padding: 5px 0;
+    }
+    .firepad .lm-hr hr {
+    	margin: 0;
+    }
+    .firepad .lm-table, .firepad .lm-picture{
+    	padding: 5px 0;
+    }
+    .firepad .lm-table table {
+    	cursor: default;
+    	width: auto;
+    	margin: 0;
+    }
+    .firepad .lm-picture {
+      position: relative;
+      max-width: 100%;
+      cursor: auto;
+    }
+    .firepad .lm-picture.other-media {
+      width: 335px;
+      height: 50px;
+      padding: 5px 15px 5px 5px;
+      border: 1px solid #d4d8dc;
+      background-color: #f7fafb;
+      color: #566679;
+      font-weight: 600;
+      margin: -12px 0 0 0;
+      display: inline-block;
+      clear: both;
+    }
+    .firepad .lm-picture.other-media.not-supported {
+    
+    }
+    .firepad .lm-picture.other-media .information {
+      float: left;
+      width: 268px;
+    }
+    .firepad .lm-picture.other-media .information p{
+      float: left;
+      display: inline-block;
+      cursor: default;
+      font-size: 16px;
+      margin: 15px 0 0 0;
+      width: 230px;
+    }
+    .firepad .lm-picture.other-media img {
+      height: 48px;
+      overflow: hidden;
+      width: 48px;
+      float: left;
+      margin: 0 15px 0 0;
+      border: 1px solid #566679;
+    }
+    .firepad .lm-picture.other-media a {
+      cursor: pointer;
+      float: right;
+    }
+    .firepad .lm-picture.other-media a:before {
+      content:"x";
+      font-size: 22px;
+      display: inline-block;
+      color: #566679;
+      margin: 11px 0 0 0;
+    }
+    .firepad .lm-picture.other-media.not-supported img {
+      content:'not supported image';
+      text-align: center;
+      border: none;
+    }
+    .firepad .lm-picture.other-media.not-supported img:before {
+      content:"x";
+      font-size: 22px;
+      display: inline-block;
+      color: #566679;
+      margin: 10px 0;
+    }
+    .firepad .lm-picture .close{
+      display: none;
+    }
+    .firepad .lm-picture.other-media:hover .close 
+    {
+      top: -10px;
+    }
+    .firepad .lm-picture:hover .close{
+      display: block;
+      position: absolute;
+      right: -8.5px;
+      top: -4.5px;
+      z-index: 10;
+      width: 18px;
+      height: 18px;
+      border-radius: 14px;
+      -moz-border-radius: 14px;
+      -webkit-border-radius: 14px;
+      background-color: rgba(224,224,224,0.7);
+      box-shadow: 0px 0px 2px rgba(0,0,0,0.5);
+      -webkit-box-shadow: 0px 0px 2px rgba(0,0,0,0.5);
+      -moz-box-shadow: 0px 0px 2px rgba(0,0,0,0.5);
+      border: 1px solid #fff;
+      cursor: pointer;
+    }
+    .firepad .lm-picture:hover .close:before {
+      content: "x";
+      font-size: 12px;
+      position: absolute;
+      left: 2px;
+      top: -2px;
+      color: #4c5b6f;
+      font-weight: 600;
+    }
+
+  </style>
+</head>
+
+<body>
+  <div id="firepad"></div>
+  <script>
+      var registerAllEntities = function(firepad) {
+      
+        var LineSentinelCharacter = '\uE000';
+        var EntitySentinelCharacter = '\uE001';
+        
+        firepad.codeMirror_.getInputField().addEventListener('copy', function(e) {
+          var input = firepad.codeMirror_.getInputField();
+          input.value = input.value.replace(new RegExp('['+LineSentinelCharacter+EntitySentinelCharacter+']', 'g'), '');
+          selectInput(input);
+          if (e.clipboardData && e.clipboardData.setData) {
+            e.preventDefault();
+            e.clipboardData.setData('text/plain', input.value);
+            var html = firepad.getHtmlFromSelection();
+            e.clipboardData.setData('text/html', html);
+            e.clipboardData.setData('text/firepad', html);
+          }
+        }.bind(this));
+        
+        firepad.codeMirror_.getInputField().addEventListener('paste', function(e) {
+          if (e.clipboardData && e.clipboardData.getData) {
+            var firepadData = e.clipboardData.getData('text/firepad');
+            if (!firepadData) return;
+            firepad.insertHtmlAtCursor(firepadData);
+            e.preventDefault();
+            return false;
+          }
+        }.bind(this));
+        
+        firepad.registerEntity('table', {
+          attrs: ['width', 'height', 'style', 'class', 'colspan', 'rowspan', 'valign', 'border', 'cellspacing', 'cellpadding'],
+          _getTableElement: function (info) {
+            var tableElement = document.createElement('table'),
+                content = info.content;
+
+            delete info.content;
+            for(attr in info) {
+              tableElement.setAttribute(attr, info[attr]);
+            }
+
+            tableElement.innerHTML = content;
+
+            return tableElement;
+          },
+          render: function (info, entityHandler) {
+            var tableContainer = document.createElement('div'),
+                tableElement = this._getTableElement(info),
+                timeoutId;
+
+            tableContainer.className = 'lm-table';
+            tableElement.className = 'table table-bordered';
+
+            tableElement.setAttribute('contenteditable', true);
+
+            var timeoutId;
+            tableElement.addEventListener('keydown', function () {
+              if(timeoutId) {
+                clearTimeout(timeoutId);
+              }
+
+              timeoutId = setTimeout(function() {
+                $(tableElement).blur();
+              }, 5000);
+            });
+
+            tableElement.addEventListener('blur', function (e) {
+              if(tableElement.innerHTML !== info.content) {
+                info.content = tableElement.innerHTML;
+                entityHandler.replace(info);
+              }
+            });
+
+            // window.addEventListener('beforeunload', function () {
+            //   if(tableElement && tableElement.innerHTML !== info.content) {
+            //     $(tableElement).blur();
+            //     return 'Some data have not been saved.';
+            //   }
+            // });
+
+            tableContainer.appendChild(tableElement);
+
+            return tableContainer;
+          },
+          fromElement: function (element) {
+            var attrs = this.attrs,
+                info = {};
+            for(var i = 0; i < attrs.length; i++) {
+              var attr = attrs[i];
+              if (element.hasAttribute(attr)) {
+                info[attr] = element.getAttribute(attr);
+              }
+            }
+            info.content = element.innerHTML;
+            return info;
+          },
+          'export': function (info) {
+            return this._getTableElement(info);
+          }
+        });
+
+        firepad.registerEntity('hr', {
+          // No attributes supported in HTML5 http://www.w3schools.com/tags/tag_hr.asp
+          render: function () {
+            var hrContainer = document.createElement('div')
+            hrElement = document.createElement('hr');
+
+            hrContainer.className = "lm-hr";
+            hrContainer.appendChild(hrElement);
+
+            return hrContainer;
+          },
+          fromElement: function (element) {
+            return {};
+          },
+          'export': function (info) {
+            return document.createElement('hr');
+          }
+        });
+
+        firepad.on('newLine', function(params) {
+          firepad.font(Text.STORE.DEFAULT_FONT);
+          if (this.hasTodoInLine(params.line)) {
+            this.insertTodoEntity();
+          }
+        }.bind(this));
+
+        firepad.registerEntity('en-todo', {
+          render: function (info, entityHandler) {
+            var inputElement = document.createElement('input');
+
+            inputElement.setAttribute('type', 'checkbox');
+            inputElement.classList.add('firepad-todo-left', 'lm-todo');
+
+            if(info.checked) {
+              inputElement.setAttribute('checked', true);
+            }
+
+            inputElement.addEventListener('click', function () {
+              entityHandler.replace({checked:this.checked});
+            })
+
+            return inputElement;
+          }.bind(this),
+          fromElement: function (element) {
+            var info = {};
+
+            if(element.hasAttribute('checked')) {
+              info.checked = true;
+            }
+
+            return info;
+          },
+          'export': function (info) {
+            var enTodoElement = document.createElement('en-todo');
+
+            if(info.checked) {
+              enTodoElement.setAttribute('checked', true);
+            }
+
+            return enTodoElement;
+          }
+        });
+
+        firepad.registerEntity('img', {
+          attrs: ['src', 'alt', 'width', 'height', 'style', 'class', 'data-lmid', 'data-type', 'data-filename'],
+          render: function(info, entityHandler) {
+            var validSize = info.width && info.height && ((info.width.toString() + info.height.toString()).indexOf('%') == -1);
+            var size = {
+              'width': (validSize && info.width) || 50,
+              'height': (validSize && info.height) || 50
+            };
+            var attrs = this.attrs,
+                imgDiv = document.createElement('div'),
+                img = document.createElement('img'),
+                removeBtn = document.createElement('button');
+
+            imgDiv.classList.add('lm-picture');
+
+            imgDiv.addEventListener('dragstart', function (event) {
+              event.dataTransfer.clearData('Text');
+              event.dataTransfer.setData('liveminutes/firepad-image-entity', JSON.stringify(info));
+               
+              // ARBR: To verify in an environment where doc / workspace servers are both in HTTPS
+              try {
+                // Create an empty canvas element
+                var canvas = document.createElement("canvas");
+                canvas.width = img.width;
+                canvas.height = img.height;
+
+                // Copy the image contents to the canvas
+                var ctx = canvas.getContext("2d");
+                ctx.drawImage(img, 0, 0);
+
+                // Get the data-URL formatted image
+                // Firefox supports PNG and JPEG. You could check img.src to guess the
+                // original format, but be aware the using "image/jpg" will re-encode the image.
+                var dataURL = ctx.getImageData(0,0, size.width, size.height);
+
+                event.dataTransfer.setData(info.type, dataURL);
+                event.dataTransfer.setData('text/uri-list', info.src);
+                event.dataTransfer.setData('text/plain', info.src);
+              } catch(err) {
+                console.error('Error while setting drag&drop data from Firepad', err);
+              }
+            });
+
+            imgDiv.addEventListener('dragend', function (event) {
+              // Remove if drag was successful
+              if(event.dataTransfer.dropEffect === "move") {
+                entityHandler.remove();
+              }
+            });
+
+            // To prevent duplicate when dragging on it itself
+            imgDiv.addEventListener('drop', function (event) {
+              var entityData = event.dataTransfer.getData('liveminutes/firepad-image-entity');
+
+              if (entityData) {
+                entityData = JSON.parse(entityData);
+                if(entityData.lmid === info.lmid) {
+                  entityHandler.remove();
+                }
+              }
+
+            });
+
+            removeBtn.classList.add('close');
+            removeBtn.textContent = '';
+            removeBtn.addEventListener('click', function () {
+              entityHandler.remove();
+            });
+
+            img.setAttribute('width', size.width);
+            img.setAttribute('height', size.height);
+
+            if(info.lmid && this._isSupportedAttachment(info.type)) {
+              // TODO : Use lm.helpers to build URL
+              info.src = CFG.UPLOAD_URL + '?action=getthumbnail&page=1&wait=1&size='+size.width+'x'+size.height+'&key='+info.lmid;
+            }
+            else if(!info.src) {
+              //info.src = '/img/clip.png';
+              info.src = '';
+            }
+
+            for(var i = 0; i < attrs.length; i++) {
+              var attr = attrs[i];
+              if (attr in info) {
+                img.setAttribute(attr, info[attr]);
+              }
+            }
+
+            imgDiv.appendChild(img);
+            imgDiv.appendChild(removeBtn);
+
+            var attachmentSupport = this._getAttachmentSupport(info.type);
+            if (attachmentSupport <= Text.ATTACHMENT_SUPPORT_STATE.PREVIEW_ONLY_ATTACHMENT) {
+              imgDiv.classList.add('other-media');
+              if(attachmentSupport === Text.ATTACHMENT_SUPPORT_STATE.NOT_SUPPORTED_ATTACHMENT) {
+                imgDiv.classList.add('not-supported');
+              }
+
+              var fileInformation = document.createElement('div'),
+                  fileName = document.createElement('p'),
+                  downloadLink = document.createElement('a');
+                  downloadLink.title = 'download file';
+
+              fileInformation.classList.add('information');
+              
+              // add ... and keep extension of filename (can't do this in css)
+              if(info.filename && info.filename.length > 28){
+                  var file = info.filename.substr(0,15);
+                  file += "...";
+                  file += info.filename.substr(info.filename.indexOf(".") - 3 );
+              } else {
+                  file = info.filename || '';
+              }
+             
+              fileName.textContent = file;
+              //fileName.textContent = info.filename;
+              fileName.setAttribute('title', info.filename);
+              fileInformation.appendChild(fileName);
+
+              //downloadLink.textContent = 'download';
+              downloadLink.textContent = '';
+              downloadLink.addEventListener('click', function () {
+                lm.helpers.downloadURL( CFG.UPLOAD_URL + '?action=getresource' + '&key=' + info.lmid);
+              });
+              fileInformation.appendChild(downloadLink);
+
+              imgDiv.appendChild(fileInformation);
+            }
+            else {
+              imgDiv.style.width = size.width + 'px';
+            }
+
+            return imgDiv;
+          },
+          fromElement: function(element) {
+            var attrs = this.attrs,
+                info = {},
+                dataPrefix = 'data-';
+            for(var i = 0; i < attrs.length; i++) {
+              var attr = attrs[i];
+              if (element.hasAttribute(attr)) {
+                var attrDataName;
+                if(attr.indexOf(dataPrefix) > -1) {
+                  attrDataName = attr.substring(dataPrefix.length);
+                }
+                else {
+                  attrDataName = attr;
+                }
+                info[attrDataName] = element.getAttribute(attr);
+              }
+            }
+            return info;
+          },
+          'export': function (info) {
+            //return document.createElement('span');
+            var img = document.createElement('img');
+            
+            if (info.width && info.height) {
+              img.setAttribute('width', info.width);
+              img.setAttribute('height', info.height);
+            }
+
+            // For modern browsers: https://developer.mozilla.org/en-US/docs/Web/API/HTMLElement.dataset
+            if(img.dataset) {
+              if(info.type) img.dataset.type = info.type;
+              if(info.filename) img.dataset.filename = info.filename;
+              if(info.lmid) img.dataset.lmid = info.lmid;
+            }
+            else {
+              if(info.type) img.setAttribute('data-type', info.type);
+              if(info.filename) img.setAttribute('data-filename', info.filename);
+              if(info.lmid) img.setAttribute('data-lmid', info.lmid);
+            }
+
+            return img.outerHTML;
+          },
+          _isSupportedAttachment: function (mimeType) {
+            return (mimeType in Text.SUPPORTED_ATTACHMENTS);
+          },
+          _getAttachmentSupport: function (mimeType) {
+            return (this._isSupportedAttachment(mimeType) && Text.SUPPORTED_ATTACHMENTS[mimeType]) || Text.ATTACHMENT_SUPPORT_STATE.NOT_SUPPORTED_ATTACHMENT;
+          }
+        });
+      
+      };
+  </script>
+</body>
+</html>
