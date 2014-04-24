@@ -5,5 +5,5 @@ Firebase binding through JavaScriptCore to enable reference sharing between ObjC
 
 the matching Firepad URL is: http://demo.firepad.io/#javascriptcore
 
-* unexpceted crashes either during loading of Firepad, or after editing
+* unexpected crashes either during loading of Firepad, or after editing
 * very unstable
